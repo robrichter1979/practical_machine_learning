@@ -1,0 +1,101 @@
+---
+title: "course_project"
+author: "Robert Richter"
+date: "Wednesday, August 19, 2015"
+output: html_document
+---
+
+## Introduction
+
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. In this project, the goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+More precisely we want to build a prediction model using the features given in the dataset to predict the fashion (classe) in which the partipants performed the barbell lifts. 
+
+## Loading of the necessary packages
+```{r}
+library(caret)
+```
+## Loading, partitioning and transforming the data
+Let us first load the data 
+```{r,cache=TRUE}
+training <- read.csv('Training/pml-training.csv')
+```
+Next we split the training data set into an actual training set (70\%) and a test set (30\%) using the code below
+```{r, cache=TRUE}
+set.seed(1234)
+inTrain<-createDataPartition(training$classe, p=.7, list=FALSE)
+traindata<-training[inTrain,]
+testdata<-training[-inTrain,]
+```
+Doing some exploratory analysis of the traindata dataset we realize that from the original 160 features only a small subset may be relevant. First we omit all variables that have 
+nearly zero variance, secondly we omit all variables that contain more than 90% NAs as entries, and finally we omit the columns 
+"X" ,"user name" ,"raw timestamp part 1","raw timestamp part 2","cvtd timestamp","new window","num window"
+that intuitively are expected to play no role in the prediction of the classe. Note that the column "new_window" will be already omitted due to the near zero variance constraint.  Below we display the code
+
+```{r, cache=TRUE}
+### nearly zero variance
+nZeroVar <- nearZeroVar(traindata)
+traindata <- traindata[, -nZeroVar]
+### most NAs
+mostNA <- sapply(traindata, function(x) sum(is.na(x)))
+traindata<-traindata[,mostNA/dim(traindata)[1]<.9]
+### removing first 5 columns 
+traindata<-traindata[, -c(1:6)]
+```
+With this training dataset we will build our model.
+
+## Model Building
+
+We choose as method RANDOM FOREST to build our model, using 5 times cross validation.
+```{r, cache=TRUE}
+fitControl<-trainControl(method='cv', number=5)
+modelfit <- train(classe ~ ., data=traindata, method="rf",trControl=fitControl)
+print( modelfit$finalModel)
+```
+We see that the model uses 500 trees and 27 variables at each split. The in sample error rate is 0.62\%.
+
+
+## Out of sample accuracy
+
+Next we are using our model to predict the classe entries in the test dataset and check its accuracy. Note that generically we would have to perform the same changes in the test set as in the traoining set, however this is here not necessary since we were only omitting columns in the training set, thus our model will only use a small subset of the features the test dataset contains (summarizing a large number of the features in the test dataset is redundant)
+
+
+```{r, cache=TRUE}
+test_pred<- predict(modelfit, testdata)
+confusionMatrix(test_pred, testdata$classe)
+```
+We find an accuracy of 99.39 \%, indicating that Random Forest gives us an excellent model, that we will apply for the prediction assignment. The out of sample error is simply given by 100\% -99.39\% =0.61\%.
+
+## Using model to make prediction for the test set (submission assignment)
+
+In the following we apply our model to the test dataset, used for the submission assignment.
+First we load the test dataset, calling it "testsubm"
+```{r, cache=TRUE}
+testsubm<- read.csv('Test/pml-testing.csv')
+```
+Next we predict the classe variable of the testsubm dataset using our model, ensuring that the outcomes are characters
+```{r, cache=TRUE}
+predictsub <- predict(modelfit, testsubm)
+predictsub <- as.character(predictsub) 
+```
+
+Next we will produce for each outcome a file required for the submission of the assignment. For that we define the function below using the code suggested in the assignment
+```{r, cache=TRUE}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+```
+and eventually apply it to the prediction.
+```{r}
+pml_write_files(predictsub)
+```
+Submission of the 20 files gave 20 out of 20 correct predictions.
+
+## Conclusion
+
+We build a prediction model using the RANDOM FOREST machine learning algorithm. We used 5 fold cross validation and obtained a prediction model that word very successfully. 
